@@ -42,9 +42,11 @@
     background:#3A332E;border:1px solid #4A423B;color:#F3EEE6;border-radius:999px;
     padding:7px 10px;font-size:13px;font-weight:600;min-height:36px}
   .seg{display:flex;background:#3A332E;border-radius:999px;padding:3px;margin-top:12px;gap:3px}
-  .seg button{flex:1;border-radius:999px;padding:9px 8px;font-size:14px;font-weight:600;
-    color:#CFC4B8;min-height:40px;transition:.15s}
+  .seg button{flex:1;border-radius:999px;padding:9px 4px;font-size:14px;font-weight:600;
+    color:#CFC4B8;min-height:40px;transition:.15s;white-space:nowrap}
   .seg button.on{background:#F3EEE6;color:#2B2522}
+  .seg.n3 button{font-size:13.5px;letter-spacing:-.01em}
+  @media (max-width:360px){ .seg.n3 button{font-size:12.5px;padding:9px 2px} }
 
   /* ---------- Tabs ---------- */
   .tabs{position:sticky;top:0;z-index:30;display:flex;background:var(--surface);
@@ -249,10 +251,7 @@
       <select id="mePick"></select>
     </label>
   </div>
-  <div class="seg" id="branchSeg">
-    <button data-branch="白光本店" class="on">白光本店</button>
-    <button data-branch="一隅">一隅</button>
-  </div>
+  <div class="seg" id="branchSeg"></div>
 </header>
 
 <nav class="tabs">
@@ -327,8 +326,27 @@
   // 夥伴名單（決定「我是」下拉，以及誰能按「已叫貨」）
   var STAFF = ["成成","菲比","顗蓁","敏珊","Evonne","Ting","Tina","彥蓁","睿睿","63","皮皮"];
 
-  // 分頁對應（與現有 GAS / JANDI 完全一致）
-  var SHEET_NAME = { "白光本店":"叫貨系統", "一隅":"一隅叫貨系統" };
+  // ── 門市設定（新增/移除門市只要改這一個陣列）─────────────────────
+  //   key   ＝ 送給 GAS 的 branch 值，也是 localStorage 記住的值
+  //   label ＝ 上方切換鈕顯示的字
+  //   sheet ＝ Google 試算表的分頁名稱（必須跟 GAS 端一模一樣）
+  //   note  ＝ 叫貨頁最上方的提示（可省略）
+  var BRANCHES = [
+    { key:"白光本店",   label:"白光本店", sheet:"叫貨系統" },
+    { key:"一隅",       label:"一隅",     sheet:"一隅叫貨系統",
+      note:"一隅目前沿用本店品項清單；要改成一隅專屬清單再跟我說。" },
+    { key:"新竹城隍店", label:"新竹城隍", sheet:"新竹城隍叫貨系統",
+      note:"新竹城隍店目前沿用本店品項清單與負責人；把新竹的廠商／品項／負責人給我，我再換成專屬清單。" }
+  ];
+  var DEFAULT_BRANCH = "白光本店";
+
+  // 由 BRANCHES 自動產生，不用手動維護
+  var SHEET_NAME = {};
+  BRANCHES.forEach(function(b){ SHEET_NAME[b.key]=b.sheet; });
+  function branchConf(key){
+    for(var i=0;i<BRANCHES.length;i++){ if(BRANCHES[i].key===key) return BRANCHES[i]; }
+    return null;
+  }
 
   // 狀態值（與 JANDI 流程共用，請勿改字）
   var ST = { PENDING:"未處理", ORDERED:"已處理/叫貨中", ARRIVED:"已到貨" };
@@ -365,6 +383,16 @@
   // 一隅暫時沿用本店清單（日後可換成一隅自己的品項）
   var GROUPS_YIYU = GROUPS_BAIGUANG;
 
+  // 新竹城隍店：先沿用本店清單，之後把下面那行換成自己的 [廠商, 負責人, [品項...]] 陣列即可
+  var GROUPS_CHENGHUANG = GROUPS_BAIGUANG;
+
+  // 門市 → 品項清單
+  var GROUPS_BY_BRANCH = {
+    "白光本店":   GROUPS_BAIGUANG,
+    "一隅":       GROUPS_YIYU,
+    "新竹城隍店": GROUPS_CHENGHUANG
+  };
+
   /* ====================================================================
      工具
      ==================================================================== */
@@ -382,7 +410,12 @@
     });
     return arr;
   }
-  function catalogFor(branch){ return buildCatalog(branch==="一隅"?GROUPS_YIYU:GROUPS_BAIGUANG); }
+  function groupsFor(branch){ return GROUPS_BY_BRANCH[branch] || GROUPS_BAIGUANG; }
+  var _catCache={};
+  function catalogFor(branch){
+    if(!_catCache[branch]) _catCache[branch]=buildCatalog(groupsFor(branch));
+    return _catCache[branch];
+  }
   // 用品項名反查負責人（給看板上由 JANDI 建立、沒帶負責人的舊資料用）
   function personOf(branch,item){
     var c=catalogFor(branch);
@@ -418,7 +451,7 @@
      狀態
      ==================================================================== */
   var state = {
-    branch: store("wlc_branch") || "白光本店",
+    branch: branchConf(store("wlc_branch")) ? store("wlc_branch") : DEFAULT_BRANCH,
     me: store("wlc_me") || "",
     view: "order",
     cart: [],          // {key,n,v,p,qty}
@@ -435,15 +468,21 @@
     sel.addEventListener("change",function(){ state.me=this.value; store("wlc_me",this.value); renderCatalog(); renderBoard(); });
   }
   function initBranch(){
+    var seg=$("#branchSeg");
+    seg.className="seg"+(BRANCHES.length>=3?" n3":"");
+    seg.innerHTML=BRANCHES.map(function(b){
+      return '<button data-branch="'+esc(b.key)+'"'+(b.key===state.branch?' class="on"':'')+'>'+esc(b.label)+'</button>';
+    }).join("");
     $$("#branchSeg button").forEach(function(b){
-      if(b.dataset.branch===state.branch) b.classList.add("on"); else b.classList.remove("on");
       b.addEventListener("click",function(){
         if(state.branch===b.dataset.branch) return;
+        if(state.cart.length && !confirm("切換到「"+b.textContent+"」會清空目前的叫貨清單（"+state.cart.length+" 項），要繼續嗎？")) return;
         state.branch=b.dataset.branch; store("wlc_branch",state.branch);
         $$("#branchSeg button").forEach(function(x){x.classList.toggle("on",x===b);});
         $("#sheetNameNote").textContent=SHEET_NAME[state.branch];
-        // 切店清空購物車，避免送錯分頁
-        state.cart=[]; renderCart(); renderCatalog();
+        // 切店清空購物車與看板資料，避免送錯分頁／看到上一家店的殘影
+        state.cart=[]; state.records=[];
+        renderCart(); renderCatalog();
         if(state.view==="board") loadBoard();
       });
     });
@@ -470,12 +509,11 @@
   var searchTerm="";
   function renderCatalog(){
     var box=$("#catalog");
-    var groups = state.branch==="一隅"?GROUPS_YIYU:GROUPS_BAIGUANG;
+    var groups = groupsFor(state.branch);
     var q=searchTerm.trim().toLowerCase();
     var html="";
-    if(state.branch==="一隅"){
-      html+='<p class="note">一隅目前沿用本店品項清單；要改成一隅專屬清單再跟我說。</p>';
-    }
+    var conf=branchConf(state.branch);
+    if(conf && conf.note) html+='<p class="note">'+esc(conf.note)+'</p>';
     var inCart={}; state.cart.forEach(function(c){inCart[c.key]=true;});
     var any=false;
     groups.forEach(function(g){
