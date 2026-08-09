@@ -10,9 +10,6 @@
     --paper:#F3EEE6; --surface:#FFFFFF; --surface-2:#FBF8F3;
     --ink:#2B2522; --muted:#8A7F76; --line:#E7DECF; --line-soft:#F0E9DD;
     --amber:#C8862B; --amber-ink:#8A5A14;
-    --p-cc:#2F6F6A;  /* 成成 */
-    --p-pb:#B5562E;  /* 菲比 */
-    --p-other:#6B6258;
     --st-pending:#C0392B; --st-pending-bg:#FBEAE7;
     --st-ordered:#2E8B57; --st-ordered-bg:#E7F3EC;
     --st-arrived:#8A8F94; --st-arrived-bg:#EFEFEF;
@@ -84,13 +81,6 @@
     box-shadow:var(--shadow)}
   .item .meta{flex:1;min-width:0}
   .item .nm{font-weight:600;font-size:16px;line-height:1.3}
-  .item .sub{display:flex;align-items:center;gap:8px;margin-top:3px}
-  .chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;
-    padding:3px 9px;border-radius:999px;line-height:1.2;white-space:nowrap}
-  .chip::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.85}
-  .chip.cc{color:var(--p-cc);background:rgba(47,111,106,.12)}
-  .chip.pb{color:var(--p-pb);background:rgba(181,86,46,.12)}
-  .chip.other{color:var(--p-other);background:rgba(107,98,88,.12)}
   .item .add{flex:0 0 auto;border:1.5px solid var(--amber);color:var(--amber-ink);
     background:#fff;border-radius:999px;padding:9px 16px;font-weight:700;font-size:14px;min-height:42px}
   .item .add.in{background:var(--amber);color:#fff;border-color:var(--amber)}
@@ -184,7 +174,6 @@
   .btn-act{flex:1;border-radius:10px;padding:11px;font-weight:700;font-size:14.5px;min-height:46px;
     border:1.5px solid transparent}
   .btn-order{background:var(--st-ordered);color:#fff}
-  .btn-order.notmine{background:#fff;color:var(--st-ordered);border-color:var(--st-ordered)}
   .btn-arrive{background:var(--ink);color:#F3EEE6}
   .eta-row{display:none;gap:8px;margin-top:9px}
   .eta-row.show{display:flex}
@@ -216,7 +205,6 @@
   .irow.s-arrived{opacity:.55}
   .rowbtn{flex:0 0 auto;border-radius:9px;padding:8px 13px;font-weight:700;font-size:13.5px;min-height:40px;border:1.5px solid transparent;white-space:nowrap}
   .rowbtn.order{background:var(--st-ordered);color:#fff}
-  .rowbtn.order.notmine{background:#fff;color:var(--st-ordered);border-color:var(--st-ordered)}
   .rowbtn.arrive{background:var(--ink);color:#F3EEE6}
   .vfoot{display:flex;gap:8px;padding:10px 12px;background:var(--surface-2);border-top:1px solid var(--line-soft)}
   .batch{flex:1;border-radius:10px;padding:11px;font-weight:700;font-size:14px;min-height:46px;border:1.5px solid transparent}
@@ -276,7 +264,6 @@
   <div class="wrap" style="padding-top:0">
     <div class="filters" id="filters">
       <button class="fchip on" data-f="open">待處理</button>
-      <button class="fchip" data-f="mine">我負責的</button>
       <button class="fchip" data-f="pending">待叫貨</button>
       <button class="fchip" data-f="ordered">已叫貨</button>
       <button class="fchip" data-f="arrived">已到貨</button>
@@ -351,34 +338,33 @@
   // 狀態值（與 JANDI 流程共用，請勿改字）
   var ST = { PENDING:"未處理", ORDERED:"已處理/叫貨中", ARRIVED:"已到貨" };
 
-  // 品項清單：[廠商, 負責人, [品項...]]
+  // 品項清單：[廠商, [品項...]]
   var GROUPS_BAIGUANG = [
-    ["好市多","成成",["黑糖","甜咖哩塊","辣咖哩塊","鮮奶油","有鹽奶油","關東細麵","豬絞肉","蜂蜜","堅果","醬油","護墊","橘子工坊去漬粉","手扒雞手套","卡式爐瓦斯罐","保鮮膜","烘焙紙","大保鮮袋","小保鮮袋"]],
-    ["雅玲央廚","成成",["牛肉麵","雞湯","粥","水餃","布丁","黑糖燕麥片","培根奶油醬","粥用油蔥"]],
-    ["坪林茶行","成成",["坪林紅茶"]],
-    ["比酷","成成",["燕麥奶"]],
-    ["廠商","成成",["冰淇淋","外帶杯","貴族橄欖油","綠色的夢","一個人的茶","Posky發票機紙捲","RO濾芯","綠色小T"]],
-    ["Apax Lab","成成",["水質滴定"]],
-    ["清淨海","成成",["洗碗精","地板清潔劑"]],
-    ["網購","成成",["米","紅藜","乾薑片","黑糖薑片","乾燥菊花","礦物質噴頭","衛生紙","擦手紙","洗碗手套","菜瓜布","布-灰色","布-綠色","布-白色","布-咖啡色","洗手乳補充包","氣泡水鋼瓶","咖啡機清潔粉"]],
-    ["智造所","成成",["Konjo不織布手沖濾紙"]],
-    ["愜意","成成",["毛孩蛋糕"]],
-    ["大海旁邊","成成",["肉桂捲","海鹽司康","伯爵茶司康"]],
-    ["小農","成成",["迷迭香"]],
-    ["蔬果","菲比",["番茄","青江菜","洋蔥","檸檬","香蕉","柳橙"]],
-    ["雞蛋林大哥","菲比",["雞蛋"]],
-    ["全聯／五金生活百貨","菲比",["中垃圾袋","大垃圾袋","14L新北市垃圾袋","25L新北市垃圾袋","辣椒醬","番茄糊","台鹽","台糖二砂","台糖細緻白砂","海鹽罐","綜合胡椒罐","煙燻香料罐","匈牙利紅椒粉","花椒粉","麵用蔥油","3號夾鏈袋","原子筆","奇異筆"]],
-    ["彭陳萬里","菲比",["八吋鮮奶油戚風蛋糕","六吋鮮奶油戚風蛋糕","巴斯克乳酪蛋糕"]],
-    ["蓓得","菲比",["酸種藍莓貝果","酸種多穀物麵包","法式長棍麵包"]],
-    ["就是良食","菲比",["舒肥雞"]],
-    ["蔡老闆","菲比",["白吐司"]],
-    ["Cozy","菲比",["蛋白霜檸檬塔","榛果巧克力塔"]],
-    ["奶油貓烘焙材料行","菲比",["防潮可可粉","紅豆泥","茶粉"]],
-    ["巧舜","菲比",["巧克力豆","冷凍綜合莓果","巴薩米克醋"]],
-    ["信用卡機","菲比",["信用卡紙捲"]],
-    ["網購","菲比",["方形甜點外帶盒","外帶甜點叉","紙漿雙杯架","白色方形防油紙","麵包用牛皮防油紙袋","外帶杯防漏紙","大牛皮紙提袋","小牛皮紙提袋"]],
-    ["Eighteen","菲比",["手沖茶紅茶","手沖茶綠茶","手沖茶鐵觀音"]],
-    ["代購","菲比",["南非國寶茶"]]
+    ["好市多",["黑糖","甜咖哩塊","辣咖哩塊","鮮奶油","有鹽奶油","關東細麵","豬絞肉","蜂蜜","堅果","醬油","護墊","橘子工坊去漬粉","手扒雞手套","卡式爐瓦斯罐","保鮮膜","烘焙紙","大保鮮袋","小保鮮袋"]],
+    ["雅玲央廚",["牛肉麵","雞湯","粥","水餃","布丁","黑糖燕麥片","培根奶油醬","粥用油蔥"]],
+    ["坪林茶行",["坪林紅茶"]],
+    ["比酷",["燕麥奶"]],
+    ["廠商",["冰淇淋","外帶杯","貴族橄欖油","綠色的夢","一個人的茶","Posky發票機紙捲","RO濾芯","綠色小T"]],
+    ["Apax Lab",["水質滴定"]],
+    ["清淨海",["洗碗精","地板清潔劑"]],
+    ["網購",["米","紅藜","乾薑片","黑糖薑片","乾燥菊花","礦物質噴頭","衛生紙","擦手紙","洗碗手套","菜瓜布","布-灰色","布-綠色","布-白色","布-咖啡色","洗手乳補充包","氣泡水鋼瓶","咖啡機清潔粉","方形甜點外帶盒","外帶甜點叉","紙漿雙杯架","白色方形防油紙","麵包用牛皮防油紙袋","外帶杯防漏紙","大牛皮紙提袋","小牛皮紙提袋"]],
+    ["智造所",["Konjo不織布手沖濾紙"]],
+    ["愜意",["毛孩蛋糕"]],
+    ["大海旁邊",["肉桂捲","海鹽司康","伯爵茶司康"]],
+    ["小農",["迷迭香"]],
+    ["蔬果",["番茄","青江菜","洋蔥","檸檬","香蕉","柳橙"]],
+    ["雞蛋林大哥",["雞蛋"]],
+    ["全聯／五金生活百貨",["中垃圾袋","大垃圾袋","14L新北市垃圾袋","25L新北市垃圾袋","辣椒醬","番茄糊","台鹽","台糖二砂","台糖細緻白砂","海鹽罐","綜合胡椒罐","煙燻香料罐","匈牙利紅椒粉","花椒粉","麵用蔥油","3號夾鏈袋","原子筆","奇異筆"]],
+    ["彭陳萬里",["八吋鮮奶油戚風蛋糕","六吋鮮奶油戚風蛋糕","巴斯克乳酪蛋糕"]],
+    ["蓓得",["酸種藍莓貝果","酸種多穀物麵包","法式長棍麵包"]],
+    ["就是良食",["舒肥雞"]],
+    ["蔡老闆",["白吐司"]],
+    ["Cozy",["蛋白霜檸檬塔","榛果巧克力塔"]],
+    ["奶油貓烘焙材料行",["防潮可可粉","紅豆泥","茶粉"]],
+    ["巧舜",["巧克力豆","冷凍綜合莓果","巴薩米克醋"]],
+    ["信用卡機",["信用卡紙捲"]],
+    ["Eighteen",["手沖茶紅茶","手沖茶綠茶","手沖茶鐵觀音"]],
+    ["代購",["南非國寶茶"]]
   ];
   // 一隅暫時沿用本店清單（日後可換成一隅自己的品項）
   var GROUPS_YIYU = GROUPS_BAIGUANG;
@@ -400,13 +386,11 @@
   var $$ = function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));};
   function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
   function store(k,v){try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k,v);}catch(e){}}
-  function personClass(p){return p==="成成"?"cc":p==="菲比"?"pb":"other";}
-
   function buildCatalog(groups){
     var arr=[];
     groups.forEach(function(g){
-      var vendor=g[0], person=g[1];
-      g[2].forEach(function(name){ arr.push({v:vendor,p:person,n:name}); });
+      var vendor=g[0];
+      g[1].forEach(function(name){ arr.push({v:vendor,n:name}); });
     });
     return arr;
   }
@@ -415,12 +399,6 @@
   function catalogFor(branch){
     if(!_catCache[branch]) _catCache[branch]=buildCatalog(groupsFor(branch));
     return _catCache[branch];
-  }
-  // 用品項名反查負責人（給看板上由 JANDI 建立、沒帶負責人的舊資料用）
-  function personOf(branch,item){
-    var c=catalogFor(branch);
-    for(var i=0;i<c.length;i++){ if(c[i].n===item) return c[i].p; }
-    return "";
   }
   // 用品項名反查廠商（看板依廠商分組用）；找不到歸「其他」
   function vendorOf(branch,item){
@@ -517,8 +495,8 @@
     var inCart={}; state.cart.forEach(function(c){inCart[c.key]=true;});
     var any=false;
     groups.forEach(function(g){
-      var vendor=g[0], person=g[1];
-      var items=g[2].filter(function(n){
+      var vendor=g[0];
+      var items=g[1].filter(function(n){
         if(!q) return true;
         return n.toLowerCase().indexOf(q)>-1 || vendor.toLowerCase().indexOf(q)>-1;
       });
@@ -529,9 +507,8 @@
         var key=state.branch+"|"+vendor+"|"+n;
         var on=inCart[key];
         html+='<div class="item">'
-          +'<div class="meta"><div class="nm">'+esc(n)+'</div>'
-          +'<div class="sub"><span class="chip '+personClass(person)+'">'+esc(person)+'</span></div></div>'
-          +'<button class="add'+(on?" in":"")+'" data-key="'+esc(key)+'" data-n="'+esc(n)+'" data-v="'+esc(vendor)+'" data-p="'+esc(person)+'">'+(on?"已加入":"加入")+'</button>'
+          +'<div class="meta"><div class="nm">'+esc(n)+'</div></div>'
+          +'<button class="add'+(on?" in":"")+'" data-key="'+esc(key)+'" data-n="'+esc(n)+'" data-v="'+esc(vendor)+'">'+(on?"已加入":"加入")+'</button>'
           +'</div>';
       });
     });
@@ -554,7 +531,7 @@
     var idx=-1;
     for(var i=0;i<state.cart.length;i++){ if(state.cart[i].key===d.key){ idx=i; break; } }
     if(idx>-1) state.cart.splice(idx,1);
-    else state.cart.push({key:d.key,n:d.n,v:d.v,p:d.p,qty:""});
+    else state.cart.push({key:d.key,n:d.n,v:d.v,qty:""});
     renderCatalog(); renderCart();
   }
 
@@ -563,13 +540,13 @@
     var html='<div class="manual-form">'
       +'<label>品項名稱</label><input id="mName" placeholder="例：手沖濾杯">'
       +'<div class="row2"><div><label>數量（可空白）</label><input id="mQty" placeholder="例：2 箱"></div>'
-      +'<div><label>負責人</label><select id="mPerson">'+STAFF.map(function(n){return "<option"+(n===state.me?" selected":"")+">"+esc(n)+"</option>";}).join("")+"</select></div></div>"
+      +'<div><label>廠商（可空白）</label><input id="mVendor" placeholder="例：好市多"></div></div>'
       +'<button class="submit" id="mAdd" style="margin-top:4px">加入清單</button></div>';
     openSheetCustom("手動加入品項",html,function(){
       $("#mAdd").addEventListener("click",function(){
         var nm=$("#mName").value.trim();
         if(!nm){ toast("請先填品項名稱",true); return; }
-        state.cart.push({key:"manual|"+Date.now(),n:nm,v:"手動",p:$("#mPerson").value,qty:$("#mQty").value.trim()});
+        state.cart.push({key:"manual|"+Date.now(),n:nm,v:$("#mVendor").value.trim()||"手動",qty:$("#mQty").value.trim()});
         renderCatalog(); renderCart(); openCart();
       });
       setTimeout(function(){ $("#mName").focus(); },100);
@@ -588,7 +565,6 @@
     $("#submitBtn").disabled=false;
     list.innerHTML=state.cart.map(function(c,i){
       return '<div class="crow">'
-        +'<span class="chip '+personClass(c.p)+'" style="flex:0 0 auto">'+esc(c.p)+'</span>'
         +'<div class="nm">'+esc(c.n)+'<span class="v">'+esc(c.v)+'</span></div>'
         +'<div class="qty"><button data-i="'+i+'" data-d="-1">−</button>'
         +'<input data-i="'+i+'" value="'+esc(c.qty)+'" placeholder="數量" inputmode="text"></input>'
@@ -640,7 +616,7 @@
     if(!state.me){ toast("先在右上角選「我是」誰",true); return; }
     submitting=true;
     var btn=$("#submitBtn"); btn.disabled=true; var old=btn.textContent; btn.textContent="送出中…";
-    var items=state.cart.map(function(c){return {item:c.n,qty:c.qty||"",person:c.p,vendor:c.v};});
+    var items=state.cart.map(function(c){return {item:c.n,qty:c.qty||"",vendor:c.v};});
     gas({action:"order",branch:state.branch,writer:state.me,payload:JSON.stringify(items)})
       .then(function(res){
         if(res&&res.ok){
@@ -685,7 +661,6 @@
   function renderBoard(){
     var recs=state.records.map(function(r){
       return {time:r.time,item:r.item,qty:r.qty,writer:r.writer,status:r.status,eta:r.eta,
-              person:r.person||personOf(state.branch,r.item),
               vendor:vendorOf(state.branch,r.item), id:r.id||""};
     });
     // tab badge = 未到貨總數
@@ -696,7 +671,6 @@
     var filtered=recs.filter(function(r){
       var k=statusKind(r.status);
       if(f==="open")    return k!=="arrived";
-      if(f==="mine")    return k!=="arrived" && r.person===state.me;
       if(f==="arrived") return k==="arrived";
       return k===f; // pending / ordered
     });
@@ -704,8 +678,7 @@
 
     if(!filtered.length){
       boardGroups={};
-      var msg = f==="mine"?"你目前沒有要處理的叫貨。"
-              : f==="arrived"?"還沒有已到貨的紀錄。"
+      var msg = f==="arrived"?"還沒有已到貨的紀錄。"
               : "目前沒有待處理的叫貨。到「叫貨」頁新增需求。";
       $("#board").innerHTML='<div class="empty"><div class="big">沒有項目</div><div>'+esc(msg)+'</div></div>';
       return;
@@ -723,15 +696,12 @@
     orderKeys.forEach(function(vendor){
       var arr=groups[vendor].slice().sort(function(a,b){ return rank[statusKind(a.status)]-rank[statusKind(b.status)]; });
       boardGroups[vendor]=arr;
-      var persons={}; arr.forEach(function(r){ if(r.person) persons[r.person]=1; });
-      var pk=Object.keys(persons); var single=pk.length===1?pk[0]:"";
       var c={pending:0,ordered:0,arrived:0}; arr.forEach(function(r){ c[statusKind(r.status)]++; });
       var cnt=[]; if(c.pending)cnt.push("待叫 "+c.pending); if(c.ordered)cnt.push("已叫 "+c.ordered); if(c.arrived)cnt.push("已到 "+c.arrived);
 
       html+='<div class="vcard"><div class="vhead"><h3>'+esc(vendor)+'</h3>'
-        +(single?'<span class="chip '+personClass(single)+'" style="font-size:11px;padding:2px 9px">'+esc(single)+'</span>':"")
         +'<span class="vcount">'+cnt.join("　")+'</span></div><div class="vbody">';
-      arr.forEach(function(r){ html+=itemRow(r,single); });
+      arr.forEach(function(r){ html+=itemRow(r); });
       html+='</div>';
 
       var pend=arr.filter(function(r){return statusKind(r.status)==="pending";});
@@ -746,18 +716,17 @@
     bindBoard();
   }
 
-  function itemRow(r,groupPerson){
+  function itemRow(r){
     var k=statusKind(r.status);
     var tag = k==="pending"?'<span class="statetag pending">待叫貨</span>'
             : k==="ordered"?'<span class="statetag ordered">已叫貨</span>'
             : '<span class="statetag arrived">已到貨</span>';
-    var mine=r.person===state.me;
     var sub="";
-    if(!groupPerson && r.person) sub+='<span class="who">'+esc(r.person)+'負責</span>';
+    if(r.writer) sub+='<span class="who">'+esc(r.writer)+' 登記</span>';
     if(k==="ordered" && r.eta) sub+='<span class="who">預計：'+esc(r.eta)+'</span>';
     var idAttr='data-item="'+esc(r.item)+'" data-id="'+esc(r.id)+'"';
     var btn="";
-    if(k==="pending") btn='<button class="rowbtn order'+(mine?"":" notmine")+'" data-do="order" '+idAttr+'>已叫貨</button>';
+    if(k==="pending") btn='<button class="rowbtn order" data-do="order" '+idAttr+'>已叫貨</button>';
     else if(k==="ordered") btn='<button class="rowbtn arrive" data-do="arrive" '+idAttr+'>已到貨</button>';
     return '<div class="irow s-'+k+'">'
       +'<div class="iname">'+esc(r.item)+(r.qty?'<span class="q">'+esc(r.qty)+'</span>':"")+sub+'</div>'
@@ -768,8 +737,6 @@
     $$('[data-do="order"]').forEach(function(b){
       b.addEventListener("click",function(){
         if(!state.me){ toast("先在右上角選「我是」誰",true); return; }
-        var mine=!b.classList.contains("notmine");
-        if(!mine && !confirm("你不是這項的負責人，確定代為標記「已叫貨」？")) return;
         openEtaInput(b);
       });
     });
@@ -814,8 +781,6 @@
     if(!list.length) return;
     if(kind==="order"){
       if(!state.me){ toast("先在右上角選「我是」誰",true); return; }
-      var notMine=list.some(function(r){ return r.person && r.person!==state.me; });
-      if(notMine && !confirm(vendor+"：你不是負責人，確定代為把整組標記已叫貨？")) return;
       if(!confirm(vendor+"：把 "+list.length+" 項都標記為已叫貨？")) return;
     } else {
       if(!confirm(vendor+"：把 "+list.length+" 項都標記為已到貨？")) return;
