@@ -322,10 +322,8 @@
   //   note  ＝ 叫貨頁最上方的提示（可省略）
   var BRANCHES = [
     { key:"白光本店",   label:"白光本店", sheet:"叫貨系統" },
-    { key:"一隅",       label:"一隅",     sheet:"一隅叫貨系統",
-      note:"一隅目前沿用本店品項清單；要改成一隅專屬清單再跟我說。" },
-    { key:"新竹城隍店", label:"新竹城隍", sheet:"新竹城隍叫貨系統",
-      note:"新竹城隍店目前沿用本店品項清單與負責人；把新竹的廠商／品項／負責人給我，我再換成專屬清單。" }
+    { key:"一隅",       label:"一隅",     sheet:"一隅叫貨系統" },
+    { key:"新竹城隍店", label:"新竹城隍", sheet:"新竹城隍叫貨系統" }
   ];
   var DEFAULT_BRANCH = "白光本店";
 
@@ -340,55 +338,31 @@
   // 狀態值（與 JANDI 流程共用，請勿改字）
   var ST = { PENDING:"未處理", ORDERED:"已處理/叫貨中", ARRIVED:"已到貨" };
 
-  // 品項清單：[廠商, [品項...]]
-  var GROUPS_BAIGUANG = [
-    ["好市多",["黑糖","甜咖哩塊","辣咖哩塊","鮮奶油","有鹽奶油","關東細麵","豬絞肉","蜂蜜","堅果","醬油","護墊","橘子工坊去漬粉","手扒雞手套","卡式爐瓦斯罐","保鮮膜","烘焙紙","大保鮮袋","小保鮮袋"]],
-    ["雅玲央廚",["牛肉麵","雞湯","粥","水餃","布丁","黑糖燕麥片","培根奶油醬","粥用油蔥"]],
-    ["新竹烘豆室",["淺焙SOE","中焙SOE","上架豆"]],
-    ["坪林茶行",["坪林紅茶"]],
-    ["比酷",["燕麥奶"]],
-    ["廠商",["冰淇淋","外帶杯","貴族橄欖油","綠色的夢","一個人的茶","Posky發票機紙捲","RO濾芯","綠色小T"]],
-    ["Apax Lab",["水質滴定"]],
-    ["清淨海",["洗碗精","地板清潔劑"]],
-    ["網購",["米","紅藜","乾薑片","黑糖薑片","乾燥菊花","礦物質噴頭","衛生紙","擦手紙","洗碗手套","菜瓜布","布-灰色","布-綠色","布-白色","布-咖啡色","洗手乳補充包","氣泡水鋼瓶","咖啡機清潔粉","方形甜點外帶盒","外帶甜點叉","紙漿雙杯架","白色方形防油紙","麵包用牛皮防油紙袋","外帶杯防漏紙","大牛皮紙提袋","小牛皮紙提袋"]],
-    ["智造所",["Konjo不織布手沖濾紙"]],
-    ["愜意",["毛孩蛋糕"]],
-    ["大海旁邊",["肉桂捲","海鹽司康","伯爵茶司康"]],
-    ["小農",["迷迭香"]],
-    ["蔬果",["番茄","青江菜","洋蔥","檸檬","香蕉","柳橙"]],
-    ["雞蛋林大哥",["雞蛋"]],
-    ["全聯／五金生活百貨",["中垃圾袋","大垃圾袋","14L新北市垃圾袋","25L新北市垃圾袋","辣椒醬","番茄糊","台鹽","台糖二砂","台糖細緻白砂","海鹽罐","綜合胡椒罐","煙燻香料罐","匈牙利紅椒粉","花椒粉","麵用蔥油","3號夾鏈袋","原子筆","奇異筆"]],
-    ["彭陳萬里",["八吋鮮奶油戚風蛋糕","六吋鮮奶油戚風蛋糕","巴斯克乳酪蛋糕"]],
-    ["蓓得",["酸種藍莓貝果","酸種多穀物麵包","法式長棍麵包"]],
-    ["就是良食",["舒肥雞"]],
-    ["蔡老闆",["白吐司"]],
-    ["Cozy",["蛋白霜檸檬塔","榛果巧克力塔"]],
-    ["奶油貓烘焙材料行",["防潮可可粉","紅豆泥","茶粉"]],
-    ["巧舜",["巧克力豆","冷凍綜合莓果","巴薩米克醋"]],
-    ["信用卡機",["信用卡紙捲"]],
-    ["Eighteen",["手沖茶紅茶","手沖茶綠茶","手沖茶鐵觀音"]],
-    ["代購",["南非國寶茶"]]
-  ];
-  // 一隅暫時沿用本店清單（日後可換成一隅自己的品項）
-  var GROUPS_YIYU = GROUPS_BAIGUANG;
+  // 品項清單：改由 GAS 讀「品項主檔」分頁提供（欄位：門市／廠商／品項／單位／安全量／停用）。
+  //   要新增品項、換廠商、調整安全量，直接改試算表就好，這支網頁不用動。見 loadCatalog()。
+  var _cat = { items: [], groupsCache: {}, unitCache: {}, vendorCache: {}, safetyCache: {} };
 
-  // 新竹城隍店：先沿用本店清單，之後把下面那行換成自己的 [廠商, 負責人, [品項...]] 陣列即可
-  var GROUPS_CHENGHUANG = GROUPS_BAIGUANG;
+  function relevantItems(branch){
+    return _cat.items.filter(function(it){ return it.branch==="全部" || it.branch===branch; });
+  }
+  // 依門市把 _cat.items 整理成 [[廠商,[品項...]], ...]，並建立單位／廠商／安全量對照表
+  function buildBranch(branch){
+    var order=[], map={}, um={}, vm={}, sm={};
+    relevantItems(branch).forEach(function(it){
+      if(!map[it.vendor]){ map[it.vendor]=[]; order.push(it.vendor); }
+      map[it.vendor].push(it.item);
+      if(it.unit)   um[it.item]=it.unit;
+      if(it.safety) sm[it.item]=it.safety;
+      vm[it.item]=it.vendor;
+    });
+    _cat.groupsCache[branch]=order.map(function(v){ return [v, map[v]]; });
+    _cat.unitCache[branch]=um; _cat.vendorCache[branch]=vm; _cat.safetyCache[branch]=sm;
+  }
+  function ensureBranch(branch){ if(!_cat.groupsCache[branch]) buildBranch(branch); }
+  function clearCatalogCache(){ _cat.groupsCache={}; _cat.unitCache={}; _cat.vendorCache={}; _cat.safetyCache={}; }
 
-  // 門市 → 品項清單
-  var GROUPS_BY_BRANCH = {
-    "白光本店":   GROUPS_BAIGUANG,
-    "一隅":       GROUPS_YIYU,
-    "新竹城隍店": GROUPS_CHENGHUANG
-  };
-
-  // 品項單位提示（顯示在品項名稱下方，不影響品名本身）。key = 品項名，須與清單完全一致。
-  // 要幫其他品項加單位，照樣往下加一行即可。
-  var UNITS = {
-    "淺焙SOE": "一鍋 4kg（16包250g）",
-    "中焙SOE": "一鍋 4kg（16包250g）"
-  };
-  function unitOf(name){ return UNITS[name] || ""; }
+  function unitOf(name){ ensureBranch(state.branch); return (_cat.unitCache[state.branch]||{})[name] || ""; }
+  function safetyOf(name){ ensureBranch(state.branch); return (_cat.safetyCache[state.branch]||{})[name] || ""; }
 
   /* ====================================================================
      工具
@@ -397,25 +371,32 @@
   var $$ = function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));};
   function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
   function store(k,v){try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k,v);}catch(e){}}
-  function buildCatalog(groups){
-    var arr=[];
-    groups.forEach(function(g){
-      var vendor=g[0];
-      g[1].forEach(function(name){ arr.push({v:vendor,n:name}); });
-    });
-    return arr;
-  }
-  function groupsFor(branch){ return GROUPS_BY_BRANCH[branch] || GROUPS_BAIGUANG; }
-  var _catCache={};
-  function catalogFor(branch){
-    if(!_catCache[branch]) _catCache[branch]=buildCatalog(groupsFor(branch));
-    return _catCache[branch];
-  }
+  function groupsFor(branch){ ensureBranch(branch); return _cat.groupsCache[branch] || []; }
   // 用品項名反查廠商（看板依廠商分組用）；找不到歸「其他」
-  function vendorOf(branch,item){
-    var c=catalogFor(branch);
-    for(var i=0;i<c.length;i++){ if(c[i].n===item) return c[i].v; }
-    return "其他";
+  function vendorOf(branch,item){ ensureBranch(branch); return (_cat.vendorCache[branch]||{})[item] || "其他"; }
+
+  /* ---------- 從 GAS 讀取品項主檔（含快取，讀不到時沿用上次） ---------- */
+  function loadCatalog(){
+    return gas({action:"catalog"}).then(function(res){
+      if(res && res.ok && res.items){
+        _cat.items = res.items;
+        clearCatalogCache();
+        store("wlc_catalog", JSON.stringify(res.items));
+        return true;
+      }
+      throw new Error(res && res.error || "讀取品項失敗");
+    }).catch(function(e){
+      var cached = store("wlc_catalog");
+      if(cached){
+        try{
+          _cat.items = JSON.parse(cached);
+          clearCatalogCache();
+          toast("暫時讀不到最新品項，先用上次的清單", true);
+          return false;
+        }catch(_){ }
+      }
+      throw e;
+    });
   }
 
   /* ---------- JSONP（GitHub Pages → GAS，免 CORS 設定） ---------- */
@@ -862,7 +843,13 @@
       document.body.insertBefore(b,document.querySelector("nav.tabs").nextSibling);
     }
     initMe(); initBranch(); initTabs(); initSearch(); initFilters(); initSheet();
-    renderCatalog(); renderCart();
+    $("#catalog").innerHTML='<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+    loadCatalog().then(function(){
+      renderCatalog(); renderCart();
+    }).catch(function(e){
+      $("#catalog").innerHTML='<div class="empty"><div class="big">讀不到品項清單</div><div>'+esc(e.message)+'</div>'
+        +'<button class="add manual" onclick="location.reload()" style="margin-top:14px;border:1.5px solid var(--amber);color:var(--amber-ink);background:#fff;border-radius:999px;padding:11px 20px;font-weight:700">重新整理</button></div>';
+    });
     // 自動更新看板（在看板頁時每 45 秒）
     setInterval(function(){ if(state.view==="board" && !document.hidden) loadBoard(); },45000);
     document.addEventListener("visibilitychange",function(){ if(!document.hidden && state.view==="board") loadBoard(); });
