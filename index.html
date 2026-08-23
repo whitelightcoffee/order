@@ -227,6 +227,25 @@
 
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
   :focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+
+  /* ---------- 管理頁 ---------- */
+  .mseg{display:flex;gap:8px;margin:12px 0 6px}
+  .mseg button{flex:1;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:9px;font-weight:700;color:var(--muted);min-height:42px}
+  .mseg button.on{background:var(--ink);color:#F3EEE6;border-color:var(--ink)}
+  .madd{display:block;width:100%;margin:8px 0 12px;border:1.5px solid var(--amber);color:var(--amber-ink);background:#fff;border-radius:12px;padding:13px;font-weight:700;min-height:48px}
+  .mnote{font-size:12.5px;color:var(--muted);margin:2px 2px 12px;line-height:1.5}
+  .mitem{display:flex;align-items:center;flex-wrap:wrap;gap:10px;background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:11px 12px;margin-bottom:8px;box-shadow:var(--shadow)}
+  .mitem.off{opacity:.62}
+  .mitem .mmeta{flex:1 1 auto;min-width:130px}
+  .mitem .mnm{font-weight:600;font-size:15.5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .mitem .msub{font-size:12px;color:var(--muted);margin-top:3px}
+  .offtag{font-size:10.5px;font-weight:800;color:var(--st-arrived);background:var(--st-arrived-bg);padding:2px 6px;border-radius:5px}
+  .mgrtag{font-size:10.5px;font-weight:800;color:var(--st-ordered);background:var(--st-ordered-bg);padding:2px 6px;border-radius:5px}
+  .mbtns{display:flex;gap:6px;flex:0 0 auto;justify-content:flex-end}
+  .mbtn{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:9px;padding:8px 11px;font-weight:600;font-size:13px;min-height:38px;white-space:nowrap}
+  .mbtn.del{color:var(--st-pending);border-color:#EAD3CE}
+  .manual-form label.chk{display:flex;align-items:flex-start;gap:8px;font-weight:600;color:var(--ink);margin:6px 0 2px}
+  .manual-form label.chk input{width:auto;margin:3px 0 0}
 </style>
 </head>
 <body>
@@ -247,6 +266,7 @@
 <nav class="tabs">
   <button id="tabOrder" class="on">叫貨</button>
   <button id="tabBoard">看板 <span class="count zero" id="boardCount">0</span></button>
+  <button id="tabManage" style="display:none">管理</button>
 </nav>
 
 <!-- ============ 叫貨 ============ -->
@@ -278,6 +298,17 @@
       </button>
     </div>
     <div id="board"></div>
+  </div>
+</section>
+
+<!-- ============ 管理（僅管理者） ============ -->
+<section id="viewManage" style="display:none">
+  <div class="wrap">
+    <div class="mseg" id="mSeg">
+      <button id="mSegItems" class="on">品項</button>
+      <button id="mSegStaff">夥伴</button>
+    </div>
+    <div id="manageBody"></div>
   </div>
 </section>
 
@@ -313,7 +344,20 @@
   var GAS_URL = "https://script.google.com/macros/s/AKfycbyTdiWmjeVLIbUNxGguvwukHG17zYNhCaf1KmtFZ3VVUmTfebbmzXOy2jdNfzX2SOwKMw/exec";
 
   // 夥伴名單（決定「我是」下拉，以及誰能按「已叫貨」）
-  var STAFF = ["成成","菲比","顗蓁","敏珊","Evonne","Ting","Tina","彥蓁","睿睿","63","皮皮"];
+  // 夥伴名單改由 GAS 讀試算表「夥伴名單」提供（見 loadStaff）。「可管理」的夥伴才進得了管理頁。
+  var staffList = [];          // [{name, manage}]
+  var _mgr = {};               // name -> true（管理者）
+  function isManager(name){ return !!_mgr[name]; }
+  function applyStaff(list){
+    staffList = list || [];
+    _mgr = {};
+    staffList.forEach(function(s){ if(s.manage) _mgr[s.name]=true; });
+  }
+  // 連不到後端時的最後退路（成成／菲比／顗蓁 為管理者）
+  var FALLBACK_STAFF = [
+    {name:"成成",manage:true},{name:"菲比",manage:true},{name:"顗蓁",manage:true},
+    {name:"敏珊"},{name:"Evonne"},{name:"Ting"},{name:"Tina"},{name:"彥蓁"},{name:"睿睿"},{name:"63"},{name:"皮皮"}
+  ];
 
   // ── 門市設定（新增/移除門市只要改這一個陣列）─────────────────────
   //   key   ＝ 送給 GAS 的 branch 值，也是 localStorage 記住的值
@@ -335,7 +379,7 @@
     return null;
   }
 
-  // 狀態值（與 JANDI 流程共用，請勿改字）
+  // 狀態值（需與 GAS／試算表一致，請勿改字）
   var ST = { PENDING:"未處理", ORDERED:"已處理/叫貨中", ARRIVED:"已到貨" };
 
   // 品項清單：改由 GAS 讀「品項主檔」分頁提供（欄位：門市／廠商／品項／單位／安全量／停用）。
@@ -434,8 +478,9 @@
      ==================================================================== */
   function initMe(){
     var sel=$("#mePick");
-    sel.innerHTML='<option value="">選擇</option>'+STAFF.map(function(n){return '<option'+(n===state.me?" selected":"")+'>'+esc(n)+'</option>';}).join("");
-    sel.addEventListener("change",function(){ state.me=this.value; store("wlc_me",this.value); renderCatalog(); renderBoard(); });
+    sel.innerHTML='<option value="">選擇</option>'+staffList.map(function(s){return '<option'+(s.name===state.me?" selected":"")+'>'+esc(s.name)+'</option>';}).join("");
+    sel.onchange=function(){ state.me=this.value; store("wlc_me",this.value); updateManageTab(); renderCatalog(); renderBoard(); };
+    updateManageTab();
   }
   function initBranch(){
     var seg=$("#branchSeg");
@@ -461,15 +506,20 @@
   function initTabs(){
     $("#tabOrder").addEventListener("click",function(){ switchView("order"); });
     $("#tabBoard").addEventListener("click",function(){ switchView("board"); });
+    $("#tabManage").addEventListener("click",function(){ switchView("manage"); });
   }
   function switchView(v){
     state.view=v;
     $("#tabOrder").classList.toggle("on",v==="order");
     $("#tabBoard").classList.toggle("on",v==="board");
+    $("#tabManage").classList.toggle("on",v==="manage");
     $("#viewOrder").style.display=v==="order"?"":"none";
     $("#viewBoard").style.display=v==="board"?"":"none";
+    $("#viewManage").style.display=v==="manage"?"":"none";
     $("#cartBar").style.display=v==="order"?"":"none";
+    if(v==="order") renderCatalog();
     if(v==="board") loadBoard();
+    if(v==="manage") enterManage();
     window.scrollTo(0,0);
   }
 
@@ -836,14 +886,225 @@
   /* ====================================================================
      啟動
      ==================================================================== */
+  /* ====================================================================
+     夥伴名單（來自試算表「夥伴名單」）
+     ==================================================================== */
+  function loadStaff(){
+    return gas({action:"staff"}).then(function(res){
+      if(res && res.ok && res.staff && res.staff.length){ applyStaff(res.staff); store("wlc_staff", JSON.stringify(res.staff)); return true; }
+      if(res && res.ok && res.staff && !res.staff.length){ applyStaff(FALLBACK_STAFF); return false; }  // 尚未 seedStaff → 用內建名單，避免鎖在外面
+      throw new Error(res && res.error || "讀取夥伴名單失敗");
+    }).catch(function(){
+      var c=store("wlc_staff");
+      if(c){ try{ applyStaff(JSON.parse(c)); return false; }catch(_){ } }
+      applyStaff(FALLBACK_STAFF);
+      return false;
+    });
+  }
+
+  /* ====================================================================
+     管理頁（僅管理者可見）：品項 CRUD ＋ 夥伴 CRUD
+     ==================================================================== */
+  var manageTab="items";
+  var manageItems=[];   // 含停用，供管理列表
+
+  function updateManageTab(){
+    var show=isManager(state.me);
+    var t=$("#tabManage"); if(t) t.style.display=show?"":"none";
+    if(!show && state.view==="manage") switchView("order");
+  }
+
+  function initManage(){
+    $("#mSegItems").addEventListener("click",function(){ setManageTab("items"); });
+    $("#mSegStaff").addEventListener("click",function(){ setManageTab("staff"); });
+  }
+
+  function enterManage(){
+    $("#mSegItems").classList.toggle("on",manageTab==="items");
+    $("#mSegStaff").classList.toggle("on",manageTab==="staff");
+    $("#manageBody").innerHTML='<div class="skel"></div><div class="skel"></div>';
+    loadManageItems().then(renderManage).catch(function(e){
+      $("#manageBody").innerHTML='<div class="empty"><div class="big">讀不到資料</div><div>'+esc(e.message)+'</div></div>';
+    });
+  }
+  function setManageTab(t){
+    manageTab=t;
+    $("#mSegItems").classList.toggle("on",t==="items");
+    $("#mSegStaff").classList.toggle("on",t==="staff");
+    renderManage();
+  }
+  function loadManageItems(){
+    return gas({action:"catalogManage"}).then(function(res){
+      if(res && res.ok){ manageItems=res.items||[]; return true; }
+      throw new Error(res && res.error || "讀取失敗");
+    });
+  }
+  function refreshAfterCatalogChange(){
+    return Promise.all([ loadCatalog(), loadManageItems() ]).then(function(){ renderManage(); });
+  }
+
+  function renderManage(){
+    if(!isManager(state.me)){ $("#manageBody").innerHTML='<div class="empty"><div class="big">僅限管理者</div><div>請在右上角選擇你的名字。</div></div>'; return; }
+    if(manageTab==="items") renderManageItems(); else renderManageStaff();
+  }
+
+  /* ---------- 品項管理 ---------- */
+  function renderManageItems(){
+    var box=$("#manageBody");
+    var html='<button class="madd" id="itemAdd">＋ 新增品項</button>';
+    if(!manageItems.length){
+      html+='<div class="empty" style="padding:30px"><div class="big">還沒有品項</div><div>按上面「新增品項」開始建立。</div></div>';
+      box.innerHTML=html; bindItemsPanel(); return;
+    }
+    var order=[], groups={};
+    manageItems.forEach(function(it){ if(!groups[it.vendor]){groups[it.vendor]=[];order.push(it.vendor);} groups[it.vendor].push(it); });
+    order.forEach(function(v){
+      html+='<div class="vendor"><h3>'+esc(v)+'</h3><span class="rule"></span><span class="n">'+groups[v].length+'</span></div>';
+      groups[v].forEach(function(it){
+        var sub=[];
+        if(it.branch && it.branch!=="全部") sub.push(esc(it.branch));
+        if(it.unit) sub.push("單位："+esc(it.unit));
+        if(it.safety) sub.push("安全量："+esc(it.safety));
+        html+='<div class="mitem'+(it.disabled?" off":"")+'" data-id="'+esc(it.id)+'">'
+          +'<div class="mmeta"><div class="mnm">'+esc(it.item)+(it.disabled?'<span class="offtag">停用</span>':'')+'</div>'
+          +(sub.length?'<div class="msub">'+sub.join("　")+'</div>':'')+'</div>'
+          +'<div class="mbtns">'
+          +'<button class="mbtn" data-act="edit">編輯</button>'
+          +'<button class="mbtn" data-act="toggle">'+(it.disabled?"啟用":"停用")+'</button>'
+          +'<button class="mbtn del" data-act="del">刪</button>'
+          +'</div></div>';
+      });
+    });
+    box.innerHTML=html; bindItemsPanel();
+  }
+  function findItem(id){ for(var i=0;i<manageItems.length;i++){ if(manageItems[i].id===id) return manageItems[i]; } return null; }
+  function bindItemsPanel(){
+    var a=$("#itemAdd"); if(a) a.addEventListener("click",function(){ openItemForm(null); });
+    $$("#manageBody .mitem").forEach(function(row){
+      var it=findItem(row.dataset.id);
+      row.querySelectorAll(".mbtn").forEach(function(b){
+        b.addEventListener("click",function(){
+          if(!it) return;
+          if(b.dataset.act==="edit") openItemForm(it);
+          else if(b.dataset.act==="toggle") toggleItemDisabled(it);
+          else deleteItem(it);
+        });
+      });
+    });
+  }
+  function vendorDatalist(){
+    var seen={}, out=[];
+    manageItems.forEach(function(it){ if(it.vendor && !seen[it.vendor]){ seen[it.vendor]=1; out.push(it.vendor); } });
+    return out;
+  }
+  function openItemForm(it){
+    var editing=!!it;
+    var vlist=vendorDatalist();
+    var branchOpts=["全部"].concat(BRANCHES.map(function(b){return b.key;}));
+    var curBranch=editing?(it.branch||"全部"):"全部";
+    var html='<div class="manual-form">'
+      +'<label>品項名稱</label><input id="fItem" value="'+esc(editing?it.item:"")+'" placeholder="例：手沖濾杯">'
+      +'<label>廠商</label><input id="fVendor" list="vendorList" value="'+esc(editing?it.vendor:"")+'" placeholder="例：好市多">'
+      +'<datalist id="vendorList">'+vlist.map(function(v){return '<option value="'+esc(v)+'">';}).join("")+'</datalist>'
+      +'<div class="row2"><div><label>單位（可空白）</label><input id="fUnit" value="'+esc(editing?it.unit:"")+'" placeholder="例：一箱6包"></div>'
+      +'<div><label>安全量（可空白）</label><input id="fSafety" value="'+esc(editing?it.safety:"")+'" placeholder="例：2"></div></div>'
+      +'<label>適用門市</label><select id="fBranch">'+branchOpts.map(function(k){return '<option'+(curBranch===k?" selected":"")+'>'+esc(k)+'</option>';}).join("")+'</select>'
+      +'<button class="submit" id="fSave" style="margin-top:4px">'+(editing?"儲存變更":"加入品項")+'</button></div>';
+    openSheetCustom(editing?"編輯品項":"新增品項",html,function(){
+      $("#fSave").addEventListener("click",function(){
+        var payload={ item:$("#fItem").value.trim(), vendor:$("#fVendor").value.trim(), unit:$("#fUnit").value.trim(), safety:$("#fSafety").value.trim(), branch:$("#fBranch").value };
+        if(!payload.item){ toast("請先填品項名稱",true); return; }
+        var btn=$("#fSave"); btn.disabled=true; var old=btn.textContent; btn.textContent="儲存中…";
+        var params={action:editing?"catalogUpdate":"catalogAdd",actor:state.me,payload:JSON.stringify(payload)};
+        if(editing) params.id=it.id;
+        gas(params).then(function(res){
+          if(res&&res.ok){ toast(editing?"已儲存 ✓":"已新增 ✓"); closeSheet(); return refreshAfterCatalogChange(); }
+          throw new Error(res&&res.error||"失敗");
+        }).catch(function(e){ toast(e.message,true); btn.disabled=false; btn.textContent=old; });
+      });
+      setTimeout(function(){ try{$("#fItem").focus();}catch(e){} },100);
+    });
+  }
+  function toggleItemDisabled(it){
+    gas({action:"catalogUpdate",actor:state.me,id:it.id,payload:JSON.stringify({disabled:!it.disabled})})
+      .then(function(res){ if(res&&res.ok){ toast(it.disabled?"已啟用":"已停用"); return refreshAfterCatalogChange(); } throw new Error(res&&res.error||"失敗"); })
+      .catch(function(e){ toast(e.message,true); });
+  }
+  function deleteItem(it){
+    if(!confirm("刪除品項「"+it.item+"」？會從品項主檔移除該列。\n（只是暫時不用的話，建議按「停用」就好。）")) return;
+    gas({action:"catalogDelete",actor:state.me,id:it.id})
+      .then(function(res){ if(res&&res.ok){ toast("已刪除"); return refreshAfterCatalogChange(); } throw new Error(res&&res.error||"失敗"); })
+      .catch(function(e){ toast(e.message,true); });
+  }
+
+  /* ---------- 夥伴管理 ---------- */
+  function renderManageStaff(){
+    var box=$("#manageBody");
+    var html='<button class="madd" id="staffAdd">＋ 新增夥伴</button>';
+    html+='<div class="mnote">開「可管理」的夥伴才能進到這個管理頁改品項／名單。</div>';
+    if(!staffList.length){ html+='<div class="empty" style="padding:30px"><div class="big">名單是空的</div></div>'; box.innerHTML=html; bindStaffPanel(); return; }
+    staffList.forEach(function(sf){
+      html+='<div class="mitem" data-name="'+esc(sf.name)+'">'
+        +'<div class="mmeta"><div class="mnm">'+esc(sf.name)+(sf.manage?'<span class="mgrtag">可管理</span>':'')+'</div></div>'
+        +'<div class="mbtns">'
+        +'<button class="mbtn" data-act="mgr">'+(sf.manage?"取消管理":"設為管理")+'</button>'
+        +'<button class="mbtn del" data-act="del">刪</button>'
+        +'</div></div>';
+    });
+    box.innerHTML=html; bindStaffPanel();
+  }
+  function findStaff(name){ for(var i=0;i<staffList.length;i++){ if(staffList[i].name===name) return staffList[i]; } return null; }
+  function bindStaffPanel(){
+    var a=$("#staffAdd"); if(a) a.addEventListener("click",openStaffForm);
+    $$("#manageBody .mitem").forEach(function(row){
+      var sf=findStaff(row.dataset.name);
+      row.querySelectorAll(".mbtn").forEach(function(b){
+        b.addEventListener("click",function(){
+          if(!sf) return;
+          if(b.dataset.act==="mgr") toggleManager(sf); else deleteStaff(sf);
+        });
+      });
+    });
+  }
+  function refreshAfterStaffChange(){ return loadStaff().then(function(){ initMe(); renderManage(); }); }
+  function openStaffForm(){
+    var html='<div class="manual-form">'
+      +'<label>夥伴名字</label><input id="sName" placeholder="例：小明">'
+      +'<label class="chk"><input type="checkbox" id="sMgr"> 給這位「可管理」權限（能進管理頁改品項／名單）</label>'
+      +'<button class="submit" id="sSave" style="margin-top:10px">新增夥伴</button></div>';
+    openSheetCustom("新增夥伴",html,function(){
+      $("#sSave").addEventListener("click",function(){
+        var name=$("#sName").value.trim();
+        if(!name){ toast("請先填名字",true); return; }
+        var btn=$("#sSave"); btn.disabled=true; btn.textContent="新增中…";
+        gas({action:"staffAdd",actor:state.me,payload:JSON.stringify({name:name,manage:$("#sMgr").checked})})
+          .then(function(res){ if(res&&res.ok){ toast("已新增 ✓"); closeSheet(); return refreshAfterStaffChange(); } throw new Error(res&&res.error||"失敗"); })
+          .catch(function(e){ toast(e.message,true); btn.disabled=false; btn.textContent="新增夥伴"; });
+      });
+      setTimeout(function(){ try{$("#sName").focus();}catch(e){} },100);
+    });
+  }
+  function toggleManager(sf){
+    gas({action:"staffUpdate",actor:state.me,payload:JSON.stringify({name:sf.name,manage:!sf.manage})})
+      .then(function(res){ if(res&&res.ok){ toast("已更新"); return refreshAfterStaffChange(); } throw new Error(res&&res.error||"失敗"); })
+      .catch(function(e){ toast(e.message,true); });
+  }
+  function deleteStaff(sf){
+    if(!confirm("把「"+sf.name+"」從名單移除？")) return;
+    gas({action:"staffDelete",actor:state.me,name:sf.name})
+      .then(function(res){ if(res&&res.ok){ toast("已移除"); return refreshAfterStaffChange(); } throw new Error(res&&res.error||"失敗"); })
+      .catch(function(e){ toast(e.message,true); });
+  }
+
   function boot(){
     if(/請貼上/.test(GAS_URL)){
       var b=document.createElement("div"); b.className="banner"; b.style.margin="14px";
       b.innerHTML="⚙️ 還沒設定後端：請打開原始碼，把 <b>GAS_URL</b> 換成你 GAS 的部署網址（/exec 結尾），叫貨與看板才會連動。";
       document.body.insertBefore(b,document.querySelector("nav.tabs").nextSibling);
     }
-    initMe(); initBranch(); initTabs(); initSearch(); initFilters(); initSheet();
+    initBranch(); initTabs(); initSearch(); initFilters(); initSheet(); initManage();
     $("#catalog").innerHTML='<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+    loadStaff().then(function(){ initMe(); });
     loadCatalog().then(function(){
       renderCatalog(); renderCart();
     }).catch(function(e){
