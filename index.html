@@ -246,6 +246,19 @@
   .mbtn.del{color:var(--st-pending);border-color:#EAD3CE}
   .manual-form label.chk{display:flex;align-items:flex-start;gap:8px;font-weight:600;color:var(--ink);margin:6px 0 2px}
   .manual-form label.chk input{width:auto;margin:3px 0 0}
+
+  /* ---------- 盤點 ---------- */
+  .countnote{font-size:13px;color:var(--muted);line-height:1.6;margin:2px 2px 12px}
+  .citem{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:11px 12px;margin-bottom:8px;box-shadow:var(--shadow);cursor:pointer}
+  .citem.on{border-color:var(--amber);background:#FBF3E6}
+  .citem .meta{flex:1;min-width:0}
+  .citem .nm{font-weight:600;font-size:16px;line-height:1.3;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .citem .sub{font-size:12px;color:var(--muted);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .safetytag{font-size:11px;font-weight:800;color:var(--amber-ink);background:#FBEEDD;border:1px solid #F0D9BC;padding:2px 7px;border-radius:6px;white-space:nowrap}
+  .incarttag{font-size:10.5px;font-weight:700;color:var(--st-ordered);background:var(--st-ordered-bg);padding:2px 6px;border-radius:5px;white-space:nowrap}
+  .tick{flex:0 0 auto;width:30px;height:30px;border-radius:8px;border:2px solid var(--line);background:var(--surface-2);position:relative;transition:.12s}
+  .citem.on .tick{background:var(--amber);border-color:var(--amber)}
+  .citem.on .tick::after{content:"";position:absolute;left:9px;top:4px;width:6px;height:12px;border:solid #fff;border-width:0 3px 3px 0;transform:rotate(45deg)}
 </style>
 </head>
 <body>
@@ -265,6 +278,7 @@
 
 <nav class="tabs">
   <button id="tabOrder" class="on">叫貨</button>
+  <button id="tabCount">盤點</button>
   <button id="tabBoard">看板 <span class="count zero" id="boardCount">0</span></button>
   <button id="tabManage" style="display:none">管理</button>
 </nav>
@@ -279,6 +293,18 @@
     </div>
   </div>
   <div class="wrap" id="catalog"></div>
+</section>
+
+<!-- ============ 盤點 ============ -->
+<section id="viewCount" style="display:none">
+  <div class="wrap">
+    <p class="countnote">照安全量盤點：低於安全量（或快沒了）的品項打勾，最後一鍵加進叫貨清單，再到「叫貨」確認送出。</p>
+    <div class="mseg" id="countSeg">
+      <button id="cSegAll" class="on">全部品項</button>
+      <button id="cSegSafety">只看有安全量</button>
+    </div>
+    <div id="countList"></div>
+  </div>
 </section>
 
 <!-- ============ 看板 ============ -->
@@ -317,6 +343,14 @@
   <div class="inner">
     <div class="summary"><b id="cartCount">0</b> 項待送出</div>
     <button class="view" id="openCart">檢視並送出</button>
+  </div>
+</div>
+
+<!-- count bar -->
+<div class="cartbar" id="countBar" style="display:none">
+  <div class="inner">
+    <div class="summary">已勾 <b id="pickCount">0</b> 項</div>
+    <button class="view" id="addPicks">加入叫貨清單</button>
   </div>
 </div>
 
@@ -496,28 +530,34 @@
         $$("#branchSeg button").forEach(function(x){x.classList.toggle("on",x===b);});
         $("#sheetNameNote").textContent=SHEET_NAME[state.branch];
         // 切店清空購物車與看板資料，避免送錯分頁／看到上一家店的殘影
-        state.cart=[]; state.records=[];
+        state.cart=[]; state.records=[]; countPick={};
         renderCart(); renderCatalog();
         if(state.view==="board") loadBoard();
+        if(state.view==="count"){ renderCount(); updateCountBar(); }
       });
     });
     $("#sheetNameNote").textContent=SHEET_NAME[state.branch];
   }
   function initTabs(){
     $("#tabOrder").addEventListener("click",function(){ switchView("order"); });
+    $("#tabCount").addEventListener("click",function(){ switchView("count"); });
     $("#tabBoard").addEventListener("click",function(){ switchView("board"); });
     $("#tabManage").addEventListener("click",function(){ switchView("manage"); });
   }
   function switchView(v){
     state.view=v;
     $("#tabOrder").classList.toggle("on",v==="order");
+    $("#tabCount").classList.toggle("on",v==="count");
     $("#tabBoard").classList.toggle("on",v==="board");
     $("#tabManage").classList.toggle("on",v==="manage");
     $("#viewOrder").style.display=v==="order"?"":"none";
+    $("#viewCount").style.display=v==="count"?"":"none";
     $("#viewBoard").style.display=v==="board"?"":"none";
     $("#viewManage").style.display=v==="manage"?"":"none";
     $("#cartBar").style.display=v==="order"?"":"none";
+    $("#countBar").style.display=v==="count"?"":"none";
     if(v==="order") renderCatalog();
+    if(v==="count") enterCount();
     if(v==="board") loadBoard();
     if(v==="manage") enterManage();
     window.scrollTo(0,0);
@@ -1096,13 +1136,103 @@
       .catch(function(e){ toast(e.message,true); });
   }
 
+  /* ====================================================================
+     盤點：照安全量打勾 → 一鍵加入叫貨
+     ==================================================================== */
+  var countPick = {};          // key -> {n, v}
+  var countFilter = "all";     // all | safety
+
+  function initCount(){
+    $("#cSegAll").addEventListener("click",function(){ setCountFilter("all"); });
+    $("#cSegSafety").addEventListener("click",function(){ setCountFilter("safety"); });
+    $("#addPicks").addEventListener("click",addPicksToCart);
+  }
+  function setCountFilter(f){
+    countFilter=f;
+    $("#cSegAll").classList.toggle("on",f==="all");
+    $("#cSegSafety").classList.toggle("on",f==="safety");
+    renderCount();
+  }
+  function enterCount(){ renderCount(); updateCountBar(); }
+
+  function renderCount(){
+    var box=$("#countList");
+    var groups=groupsFor(state.branch);
+    var inCart={}; state.cart.forEach(function(c){ inCart[c.key]=true; });
+    var html=""; var any=false;
+    groups.forEach(function(g){
+      var vendor=g[0];
+      var items=g[1].filter(function(n){ return countFilter==="all" ? true : !!safetyOf(n); });
+      if(!items.length) return;
+      any=true;
+      html+='<div class="vendor"><h3>'+esc(vendor)+'</h3><span class="rule"></span><span class="n">'+items.length+'</span></div>';
+      items.forEach(function(n){
+        var key=state.branch+"|"+vendor+"|"+n;
+        var on=!!countPick[key];
+        var sub=[];
+        var sf=safetyOf(n);
+        if(sf) sub.push('<span class="safetytag">安全量 '+esc(sf)+'</span>');
+        if(unitOf(n)) sub.push('單位：'+esc(unitOf(n)));
+        if(inCart[key]) sub.push('<span class="incarttag">已在叫貨清單</span>');
+        html+='<div class="citem'+(on?" on":"")+'" data-key="'+esc(key)+'" data-n="'+esc(n)+'" data-v="'+esc(vendor)+'">'
+          +'<div class="meta"><div class="nm">'+esc(n)+'</div>'
+          +(sub.length?'<div class="sub">'+sub.join("　")+'</div>':'')+'</div>'
+          +'<div class="tick" aria-hidden="true"></div>'
+          +'</div>';
+      });
+    });
+    if(!any){
+      html='<div class="empty" style="padding:36px 10px"><div class="big">'
+        +(countFilter==="safety"?"目前沒有設定安全量的品項":"這家店還沒有品項")+'</div>'
+        +'<div>'+(countFilter==="safety"?"可以在「管理 → 品項」幫常盯庫存的品項填上安全量。":"到「管理 → 品項」新增，或先用叫貨的手動加入。")+'</div></div>';
+    }
+    box.innerHTML=html;
+    $$("#countList .citem").forEach(function(row){
+      row.addEventListener("click",function(){ toggleCountPick(row); });
+    });
+  }
+
+  function toggleCountPick(row){
+    var key=row.dataset.key;
+    if(countPick[key]){ delete countPick[key]; row.classList.remove("on"); }
+    else { countPick[key]={n:row.dataset.n, v:row.dataset.v}; row.classList.add("on"); }
+    updateCountBar();
+  }
+
+  function countPickKeys(){ return Object.keys(countPick); }
+
+  function updateCountBar(){
+    var keys=countPickKeys();
+    $("#pickCount").textContent=keys.length;
+    $("#countBar").classList.toggle("show", keys.length>0 && state.view==="count");
+  }
+
+  function addPicksToCart(){
+    var keys=countPickKeys();
+    if(!keys.length) return;
+    var inCart={}; state.cart.forEach(function(c){ inCart[c.key]=true; });
+    var added=0;
+    keys.forEach(function(key){
+      if(inCart[key]) return;
+      var p=countPick[key];
+      state.cart.push({key:key, n:p.n, v:p.v, qty:""});
+      added++;
+    });
+    countPick={};
+    var dup=keys.length-added;
+    switchView("order");
+    renderCart();
+    openCart();
+    toast(added?("已加入 "+added+" 項到叫貨清單"+(dup?"（"+dup+" 項原本就在清單裡）":"")):"這些品項都已經在叫貨清單裡了");
+  }
+
   function boot(){
     if(/請貼上/.test(GAS_URL)){
       var b=document.createElement("div"); b.className="banner"; b.style.margin="14px";
       b.innerHTML="⚙️ 還沒設定後端：請打開原始碼，把 <b>GAS_URL</b> 換成你 GAS 的部署網址（/exec 結尾），叫貨與看板才會連動。";
       document.body.insertBefore(b,document.querySelector("nav.tabs").nextSibling);
     }
-    initBranch(); initTabs(); initSearch(); initFilters(); initSheet(); initManage();
+    initBranch(); initTabs(); initSearch(); initFilters(); initSheet(); initManage(); initCount();
     $("#catalog").innerHTML='<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
     loadStaff().then(function(){ initMe(); });
     loadCatalog().then(function(){
