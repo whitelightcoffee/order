@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- 每次改版可換 data-build（裝了 sw.js 後其實不改也會自動更新；此值供版本標籤／備援用） -->
-<html lang="zh-Hant" data-build="2025-08-25-1">
+<html lang="zh-Hant" data-build="2026-08-27-1">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -122,6 +122,10 @@
   .crow .nm{flex:1;font-weight:600}
   .crow .nm .v{display:block;font-size:12px;color:var(--muted);font-weight:500;margin-top:2px}
   .crow .nm .u{display:block;font-size:12px;color:var(--muted);font-weight:500;margin-top:2px}
+  .crow .nm .cnote{display:block;width:100%;margin-top:7px;border:1px solid var(--line);
+    border-radius:9px;padding:8px 10px;font-size:13.5px;background:var(--surface-2);
+    outline:none;min-height:38px}
+  .crow .nm .cnote:focus{border-color:var(--amber);background:#fff}
   .qty{display:flex;align-items:center;border:1px solid var(--line);border-radius:10px;overflow:hidden}
   .qty button{width:38px;height:40px;font-size:20px;color:var(--amber-ink);background:var(--surface-2)}
   .qty input{width:48px;height:40px;text-align:center;border:none;outline:none;background:#fff;
@@ -406,6 +410,13 @@
   ];
   var DEFAULT_BRANCH = "白光本店";
 
+  // ── 需要「備註」欄的品項 ────────────────────────────────────────────
+  //   在叫貨清單裡，這些品項會多出一格備註欄，可以打更詳細的叫貨需求
+  //   （例：豆種、烘焙度、包裝規格）。要讓別的品項也能打備註，
+  //   把品項名加進這個陣列即可（名稱需與「品項主檔」分頁一致）。
+  var NOTE_ITEMS = ["上架豆"];
+  function needsNote(name){ return NOTE_ITEMS.indexOf(name) > -1; }
+
   // 由 BRANCHES 自動產生，不用手動維護
   var SHEET_NAME = {};
   BRANCHES.forEach(function(b){ SHEET_NAME[b.key]=b.sheet; });
@@ -648,7 +659,9 @@
     $("#submitBtn").disabled=false;
     list.innerHTML=state.cart.map(function(c,i){
       return '<div class="crow">'
-        +'<div class="nm">'+esc(c.n)+'<span class="v">'+esc(c.v)+'</span>'+(unitOf(c.n)?'<span class="u">單位：'+esc(unitOf(c.n))+'</span>':'')+'</div>'
+        +'<div class="nm">'+esc(c.n)+'<span class="v">'+esc(c.v)+'</span>'+(unitOf(c.n)?'<span class="u">單位：'+esc(unitOf(c.n))+'</span>':'')
+          +(needsNote(c.n)?'<input class="cnote" data-i="'+i+'" value="'+esc(c.note||"")+'" placeholder="備註（例：耶加雪菲 水洗，2 包）">':'')
+          +'</div>'
         +'<div class="qty"><button data-i="'+i+'" data-d="-1">−</button>'
         +'<input data-i="'+i+'" value="'+esc(c.qty)+'" placeholder="數量" inputmode="text"></input>'
         +'<button data-i="'+i+'" data-d="1">＋</button></div>'
@@ -666,6 +679,9 @@
     });
     $$('.qty input',list).forEach(function(inp){
       inp.addEventListener("input",function(){ state.cart[+inp.dataset.i].qty=inp.value; });
+    });
+    $$('.cnote',list).forEach(function(inp){
+      inp.addEventListener("input",function(){ state.cart[+inp.dataset.i].note=inp.value; });
     });
     $$('.del',list).forEach(function(b){
       b.addEventListener("click",function(){ state.cart.splice(+b.dataset.del,1); renderCart(); renderCatalog(); });
@@ -699,7 +715,9 @@
     if(!state.me){ toast("先在右上角選「我是」誰",true); return; }
     submitting=true;
     var btn=$("#submitBtn"); btn.disabled=true; var old=btn.textContent; btn.textContent="送出中…";
-    var items=state.cart.map(function(c){return {item:c.n,qty:c.qty||"",vendor:c.v};});
+    var items=state.cart.map(function(c){
+      return {item:c.n, qty:c.qty||"", vendor:c.v, note:(c.note||"").trim()};
+    });
     gas({action:"order",branch:state.branch,writer:state.me,payload:JSON.stringify(items)})
       .then(function(res){
         if(res&&res.ok){
