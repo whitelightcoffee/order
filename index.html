@@ -410,6 +410,28 @@
   ];
   var DEFAULT_BRANCH = "白光本店";
 
+  // ── 分店 → 區域對照（「我是」選單依區域過濾夥伴）──────────────────
+  //   林口／一隅 兩間店合併成「林口」區；新竹城隍店為「新竹」區。
+  //   夥伴名單分頁的「區域」欄填「林口」或「新竹」；跨區用頓號隔（林口、新竹）；
+  //   留空＝全部區域都看得到（適合到處跑的店長／老闆）。
+  //   之後新增門市，只要在這裡補一筆 分店key→區域 即可。
+  var BRANCH_REGION = {
+    "白光本店":   "林口",
+    "一隅":       "林口",
+    "新竹城隍店": "新竹"
+  };
+  function regionOfBranch(branch){ return BRANCH_REGION[branch] || ""; }
+  // 這位夥伴在「目前分店」是否該出現在「我是」下拉
+  function staffInRegion(sf, branch){
+    var reg = regionOfBranch(branch);
+    var raw = String((sf && sf.region) || "").trim();
+    if(!raw) return true;                 // 沒填區域＝全部都看得到
+    if(!reg) return true;                 // 分店沒對到區域（保險）＝全部看得到
+    // 支援頓號／逗號／斜線分隔的多區
+    var list = raw.split(/[、,，\/\s]+/).filter(Boolean);
+    return list.indexOf(reg) > -1;
+  }
+
   // ── 需要「備註」欄的品項 ────────────────────────────────────────────
   //   在叫貨清單裡，這些品項會多出一格備註欄，可以打更詳細的叫貨需求
   //   （例：豆種、烘焙度、包裝規格）。要讓別的品項也能打備註，
@@ -524,7 +546,14 @@
      ==================================================================== */
   function initMe(){
     var sel=$("#mePick");
-    sel.innerHTML='<option value="">選擇</option>'+staffList.map(function(s){return '<option'+(s.name===state.me?" selected":"")+'>'+esc(s.name)+'</option>';}).join("");
+    // 只列出「目前分店所屬區域」的夥伴（林口店＝林口區、新竹店＝新竹區）
+    var shown=staffList.filter(function(s){ return staffInRegion(s, state.branch); });
+    // 保險：若目前選的人不在這一區（例如剛切店），仍把他補進來，避免身分突然不見
+    if(state.me && !shown.some(function(s){ return s.name===state.me; })){
+      var cur=staffList.filter(function(s){ return s.name===state.me; });
+      shown = cur.concat(shown);
+    }
+    sel.innerHTML='<option value="">選擇</option>'+shown.map(function(s){return '<option'+(s.name===state.me?" selected":"")+'>'+esc(s.name)+'</option>';}).join("");
     sel.onchange=function(){ state.me=this.value; store("wlc_me",this.value); updateManageTab(); renderCatalog(); renderBoard(); };
     updateManageTab();
   }
@@ -541,6 +570,7 @@
         state.branch=b.dataset.branch; store("wlc_branch",state.branch);
         $$("#branchSeg button").forEach(function(x){x.classList.toggle("on",x===b);});
         $("#sheetNameNote").textContent=SHEET_NAME[state.branch];
+        initMe();  // 換店＝換區，重刷「我是」下拉只留這一區的夥伴
         // 切店清空購物車與看板資料，避免送錯分頁／看到上一家店的殘影
         state.cart=[]; state.records=[]; countPick={};
         renderCart(); renderCatalog();
@@ -1103,9 +1133,12 @@
     html+='<div class="mnote">開「可管理」的夥伴才能進到這個管理頁改品項／名單。</div>';
     if(!staffList.length){ html+='<div class="empty" style="padding:30px"><div class="big">名單是空的</div></div>'; box.innerHTML=html; bindStaffPanel(); return; }
     staffList.forEach(function(sf){
+      var regTxt = String(sf.region||"").trim() || "全部";
       html+='<div class="mitem" data-name="'+esc(sf.name)+'">'
-        +'<div class="mmeta"><div class="mnm">'+esc(sf.name)+(sf.manage?'<span class="mgrtag">可管理</span>':'')+'</div></div>'
+        +'<div class="mmeta"><div class="mnm">'+esc(sf.name)+(sf.manage?'<span class="mgrtag">可管理</span>':'')+'</div>'
+        +'<div class="msub">'+esc(regTxt)+'</div></div>'
         +'<div class="mbtns">'
+        +'<button class="mbtn" data-act="region">改區域</button>'
         +'<button class="mbtn" data-act="mgr">'+(sf.manage?"取消管理":"設為管理")+'</button>'
         +'<button class="mbtn del" data-act="del">刪</button>'
         +'</div></div>';
@@ -1120,15 +1153,35 @@
       row.querySelectorAll(".mbtn").forEach(function(b){
         b.addEventListener("click",function(){
           if(!sf) return;
-          if(b.dataset.act==="mgr") toggleManager(sf); else deleteStaff(sf);
+          if(b.dataset.act==="mgr") toggleManager(sf);
+          else if(b.dataset.act==="region") openRegionForm(sf);
+          else deleteStaff(sf);
         });
       });
     });
   }
   function refreshAfterStaffChange(){ return loadStaff().then(function(){ initMe(); renderManage(); }); }
+  // 區域核取 UI（林口／新竹；兩個都不勾＝全部區域）。cur 是目前的區域字串。
+  function regionChecksHtml(cur){
+    var raw=String(cur||"").trim();
+    var picked={};
+    raw.split(/[、,，\/\s]+/).filter(Boolean).forEach(function(x){ picked[x]=true; });
+    return '<label>看得到的區域</label>'
+      +'<label class="chk"><input type="checkbox" id="rLK"'+(picked["林口"]?" checked":"")+'> 林口（林口＋一隅）</label>'
+      +'<label class="chk"><input type="checkbox" id="rHC"'+(picked["新竹"]?" checked":"")+'> 新竹</label>'
+      +'<div class="mnote" style="margin-top:2px">兩個都不勾＝全部區域都看得到（適合到處跑的人）。</div>';
+  }
+  // 讀核取結果 → 區域字串（"林口" / "新竹" / "林口、新竹" / ""）
+  function readRegionChecks(){
+    var arr=[];
+    if($("#rLK") && $("#rLK").checked) arr.push("林口");
+    if($("#rHC") && $("#rHC").checked) arr.push("新竹");
+    return arr.join("、");
+  }
   function openStaffForm(){
     var html='<div class="manual-form">'
       +'<label>夥伴名字</label><input id="sName" placeholder="例：小明">'
+      +regionChecksHtml("")
       +'<label class="chk"><input type="checkbox" id="sMgr"> 給這位「可管理」權限（能進管理頁改品項／名單）</label>'
       +'<button class="submit" id="sSave" style="margin-top:10px">新增夥伴</button></div>';
     openSheetCustom("新增夥伴",html,function(){
@@ -1136,11 +1189,26 @@
         var name=$("#sName").value.trim();
         if(!name){ toast("請先填名字",true); return; }
         var btn=$("#sSave"); btn.disabled=true; btn.textContent="新增中…";
-        gas({action:"staffAdd",actor:state.me,payload:JSON.stringify({name:name,manage:$("#sMgr").checked})})
+        gas({action:"staffAdd",actor:state.me,payload:JSON.stringify({name:name,manage:$("#sMgr").checked,region:readRegionChecks()})})
           .then(function(res){ if(res&&res.ok){ toast("已新增 ✓"); closeSheet(); return refreshAfterStaffChange(); } throw new Error(res&&res.error||"失敗"); })
           .catch(function(e){ toast(e.message,true); btn.disabled=false; btn.textContent="新增夥伴"; });
       });
       setTimeout(function(){ try{$("#sName").focus();}catch(e){} },100);
+    });
+  }
+  // 改既有夥伴的區域
+  function openRegionForm(sf){
+    var html='<div class="manual-form">'
+      +'<div class="mnote" style="margin-bottom:6px">設定「'+esc(sf.name)+'」在哪一區的「我是」下拉出現。</div>'
+      +regionChecksHtml(sf.region||"")
+      +'<button class="submit" id="rSave" style="margin-top:10px">儲存</button></div>';
+    openSheetCustom("改區域："+sf.name,html,function(){
+      $("#rSave").addEventListener("click",function(){
+        var btn=$("#rSave"); btn.disabled=true; btn.textContent="儲存中…";
+        gas({action:"staffUpdate",actor:state.me,payload:JSON.stringify({name:sf.name,region:readRegionChecks()})})
+          .then(function(res){ if(res&&res.ok){ toast("已更新 ✓"); closeSheet(); return refreshAfterStaffChange(); } throw new Error(res&&res.error||"失敗"); })
+          .catch(function(e){ toast(e.message,true); btn.disabled=false; btn.textContent="儲存"; });
+      });
     });
   }
   function toggleManager(sf){
